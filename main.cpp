@@ -10,6 +10,6 @@ std::string testing()
 int main()
 {
     webServer server;
-    server.routes["/"] = webServer::processGetRequestFile("testing.html");
+    server.routes["/"] = webServer::processGetRequestFile("testing.jpg","image/jpeg");
     server.initalize();
 }

@@ -162,6 +162,7 @@ class webServer
 {
 public:
     std::map<std::string, std::function<std::string(HTTPHeader)>> routes;
+    std::map<std::string, std::function<void(int, HTTPHeader)>> rawRoutes;
     int serverSockFD;
 
     struct connection
@@ -170,6 +171,7 @@ public:
         struct sockaddr address;
         int addressLength;
         std::map<std::string, std::function<std::string(HTTPHeader)>>* routes;
+        std::map<std::string, std::function<void(int, HTTPHeader)>>* rawRoutes;
     };
 
     static std::function<std::string(HTTPHeader)> processGetRequestRaw(std::function<std::string()> toSendFunction)
@@ -192,7 +194,7 @@ public:
         };
     }
 
-    static std::function<std::string(HTTPHeader)> processGetRequestFile(std::string fileName)
+    static std::function<std::string(HTTPHeader)> processGetRequestFile(std::string fileName, std::string mimeType)
     {
         std::ifstream inputStream(fileName);
         std::stringstream stringStream;
@@ -204,7 +206,7 @@ public:
         headerToSend.setStatusCode("200");
         headerToSend.setStatus("OK");
         headerToSend.headers["Server"] = "custom/0.0.1";
-        headerToSend.headers["Content-Type"] = "text/html"; //will need to change this based on file extension
+        headerToSend.headers["Content-Type"] = mimeType;
         headerToSend.headers["Content-Length"] = std::to_string(body.size());
         headerToSend.headers["Connection"] = "keep-alive";
         headerToSend.body = body;
@@ -230,6 +232,10 @@ public:
         {
             std::string toSend = (*conn->routes)[header.path()](header);
             send(conn->sockfd, toSend.c_str(), toSend.size(), 0);
+        }
+        else if((*conn->rawRoutes).count(header.path()))
+        {
+            (*conn->rawRoutes)[header.path()](conn->sockfd, header);
         }
 
         close(conn->sockfd);
@@ -257,6 +263,7 @@ public:
             struct connection* conn = (struct connection*)malloc(sizeof(struct connection));
             conn->sockfd = accept(serverSockFD, &conn->address, (socklen_t*)&conn->addressLength);
             conn->routes = &routes;
+            conn->rawRoutes = &rawRoutes;
             if(conn->sockfd <= 0)
             {
                 delete(conn);
