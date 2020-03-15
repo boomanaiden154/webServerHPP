@@ -15,11 +15,85 @@ class HTTPHeader
 {
 public:
     std::map<std::string, std::string> headers;
+    std::string requestType;
+    std::string path;
+    std::string protocol;
+    //parser state, so that if the header is in multiple packets it can still be parsed
     std::string buffer;
+    int bufferIndex;
+    std::string fieldName;
+    std::string fieldValue;
+    bool parsingFieldName;
+
+    HTTPHeader()
+    {
+        bufferIndex = 0;
+        parsingFieldName = true;
+    }
 
     void parse(std::string input)
     {
+        buffer += input;
+        if(bufferIndex == 0)
+        {
+            while(buffer[bufferIndex] != ' ')
+            {
+                requestType += buffer[bufferIndex];
+                bufferIndex++;
+            }
+            bufferIndex++;
+            while(buffer[bufferIndex] != ' ')
+            {
+                path += buffer[bufferIndex];
+                bufferIndex++;
+            }
+            bufferIndex++;
+            while(buffer[bufferIndex] != '\r')
+            {
+                protocol += buffer[bufferIndex];
+                bufferIndex++;
+            }
+            bufferIndex += 2;
+        }
+        while(buffer[bufferIndex] != '\r' && buffer[bufferIndex + 1] != '\n')
+        {
+            if(parsingFieldName)
+            {
+                while(buffer[bufferIndex] != ':' && buffer[bufferIndex + 1] != ' ')
+                {
+                    fieldName += buffer[bufferIndex];
+                    bufferIndex++;
+                }
+                bufferIndex += 2;
+                parsingFieldName = false;
+            }
+            else
+            {
+                while(buffer[bufferIndex] != '\r' && buffer[bufferIndex + 1] != '\n')
+                {
+                    fieldValue += buffer[bufferIndex];
+                    bufferIndex++;
+                }
+                bufferIndex += 2;
+                headers[fieldName] = fieldValue;
+                fieldName.clear();
+                fieldValue.clear();
+                parsingFieldName = true;
+            }
+        }
+    }
 
+    void printData()
+    {
+        std::cout << requestType << std::endl;
+        std::cout << path << std::endl;
+        std::cout << protocol << std::endl;
+        std::map<std::string,std::string>::iterator itr;
+        for(itr = headers.begin(); itr != headers.end(); itr++)
+        {
+            std::cout << itr->first << std::endl;
+            std::cout << itr->second << std::endl;
+        }
     }
 };
 
@@ -41,6 +115,9 @@ class webServer
         std::cout << recieved << std::endl;
         buffer[recieved] = '\0';
         printf("%s\n", buffer);
+        HTTPHeader headerThing;
+        headerThing.parse(std::string(buffer));
+        headerThing.printData();
 
         close(conn->sockfd);
         delete(conn);
