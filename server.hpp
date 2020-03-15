@@ -169,6 +169,25 @@ public:
         std::map<std::string, std::function<std::string(HTTPHeader)>>* routes;
     };
 
+    static std::function<std::string(HTTPHeader)> processGetRequestRaw(std::function<std::string()> toSendFunction)
+    {
+        return [&toSendFunction](HTTPHeader header){
+            std::string toSend = toSendFunction();
+
+            HTTPHeader headerToSend(false);
+            headerToSend.setProtocol("HTTP/1.1");
+            headerToSend.setStatusCode("200");
+            headerToSend.setStatus("OK");
+            headerToSend.headers["Server"] = "custom/0.0.1";
+            headerToSend.headers["Content-Type"] = "text/html";
+            headerToSend.headers["Content-Length"] = std::to_string(toSend.size());
+            headerToSend.headers["Connection"] = "keep-alive";
+            headerToSend.body = toSend;
+
+            return headerToSend.getHeaderString();
+        };
+    }
+
     static void* processConnection(void* pointer)
     {
         char buffer[2048];
