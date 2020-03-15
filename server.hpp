@@ -160,6 +160,7 @@ class webServer
 {
 public:
     std::map<std::string, std::function<std::string(HTTPHeader)>> routes;
+    int serverSockFD;
 
     struct connection
     {
@@ -211,24 +212,23 @@ public:
 
     void initalize()
     {
-        int sockfd;
         struct sockaddr_in address;
         int port;
 
-        sockfd = socket(AF_INET, SOCK_STREAM, 0);
+        serverSockFD = socket(AF_INET, SOCK_STREAM, 0);
 
         address.sin_family = AF_INET;
         address.sin_addr.s_addr = INADDR_ANY;
         address.sin_port = htons(PORT);
 
-        bind(sockfd, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
-        listen(sockfd, 5);
+        bind(serverSockFD, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
+        listen(serverSockFD, 5);
 
         while(1)
         {
             pthread_t thread;
             struct connection* conn = (struct connection*)malloc(sizeof(struct connection));
-            conn->sockfd = accept(sockfd, &conn->address, (socklen_t*)&conn->addressLength);
+            conn->sockfd = accept(serverSockFD, &conn->address, (socklen_t*)&conn->addressLength);
             conn->routes = &routes;
             if(conn->sockfd <= 0)
             {
@@ -240,5 +240,10 @@ public:
                 pthread_detach(thread);
             }
         }
+    }
+
+    void close()
+    {
+        close(serverSockFD);
     }
 };
