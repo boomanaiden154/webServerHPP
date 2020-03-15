@@ -144,7 +144,7 @@ public:
     std::string getHeaderString()
     {
         std::string toReturn;
-        toReturn += requestType() + " " + path() + " " + protocol() + "\r\n";
+        toReturn += headerField1 + " " + headerField2 + " " + headerField3 + "\r\n";
         std::map<std::string, std::string>::iterator itr;
         for(itr = headers.begin(); itr != headers.end(); itr++)
         {
@@ -158,13 +158,15 @@ public:
 
 class webServer
 {
-    std::map<std::string, std::function<std::string(HTTPHeader)> routes;
+public:
+    std::map<std::string, std::function<std::string(HTTPHeader)>> routes;
 
     struct connection
     {
         int sockfd;
         struct sockaddr address;
         int addressLength;
+        std::map<std::string, std::function<std::string(HTTPHeader)>>* routes;
     };
 
     static void* processConnection(void* pointer)
@@ -173,19 +175,21 @@ class webServer
         connection* conn = (connection*)pointer;
 
         int recieved = recv(conn->sockfd, buffer, sizeof(buffer) - 1, 0);
-        std::cout << recieved << std::endl;
         buffer[recieved] = '\0';
-        printf("%s\n", buffer);
-        HTTPHeader headerThing(true);
-        headerThing.parse(std::string(buffer));
-        std::cout << headerThing.getHeaderString() << std::endl;
+        HTTPHeader header(true);
+        header.parse(std::string(buffer));
+
+        if((*conn->routes).count(header.path()))
+        {
+            std::string toSend = (*conn->routes)[header.path()](header);
+            send(conn->sockfd, toSend.c_str(), toSend.size(), 0);
+        }
 
         close(conn->sockfd);
         delete(conn);
         pthread_exit(0);
     }
 
-public:
     void initalize()
     {
         int sockfd;
@@ -206,6 +210,7 @@ public:
             pthread_t thread;
             struct connection* conn = (struct connection*)malloc(sizeof(struct connection));
             conn->sockfd = accept(sockfd, &conn->address, (socklen_t*)&conn->addressLength);
+            conn->routes = &routes;
             if(conn->sockfd <= 0)
             {
                 delete(conn);
