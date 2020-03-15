@@ -9,6 +9,8 @@
 #include <string>
 #include <map>
 #include <functional>
+#include <fstream>
+#include <sstream>
 
 #define PORT 8081
 
@@ -172,7 +174,8 @@ public:
 
     static std::function<std::string(HTTPHeader)> processGetRequestRaw(std::function<std::string()> toSendFunction)
     {
-        return [&toSendFunction](HTTPHeader header){
+        return [&toSendFunction](HTTPHeader header)
+        {
             std::string toSend = toSendFunction();
 
             HTTPHeader headerToSend(false);
@@ -187,6 +190,30 @@ public:
 
             return headerToSend.getHeaderString();
         };
+    }
+
+    static std::function<std::string(HTTPHeader)> processGetRequestFile(std::string fileName)
+    {
+        std::ifstream inputStream(fileName);
+        std::stringstream stringStream;
+        stringStream << inputStream.rdbuf();
+        std::string body = stringStream.str();
+        
+        HTTPHeader headerToSend(false);
+        headerToSend.setProtocol("HTTP/1.1");
+        headerToSend.setStatusCode("200");
+        headerToSend.setStatus("OK");
+        headerToSend.headers["Server"] = "custom/0.0.1";
+        headerToSend.headers["Content-Type"] = "text/html"; //will need to change this based on file extension
+        headerToSend.headers["Content-Length"] = std::to_string(body.size());
+        headerToSend.headers["Connection"] = "keep-alive";
+        headerToSend.body = body;
+        std::string toSend = headerToSend.getHeaderString();
+
+        return [toSend](HTTPHeader header)
+        {
+            return toSend;
+        }; 
     }
 
     static void* processConnection(void* pointer)
@@ -242,7 +269,7 @@ public:
         }
     }
 
-    void close()
+    void closeServer()
     {
         close(serverSockFD);
     }
