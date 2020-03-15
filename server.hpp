@@ -8,6 +8,7 @@
 #include <cstring>
 #include <string>
 #include <map>
+#include <functional>
 
 #define PORT 8081
 
@@ -15,9 +16,11 @@ class HTTPHeader
 {
 public:
     std::map<std::string, std::string> headers;
-    std::string requestType;
-    std::string path;
-    std::string protocol;
+    bool isRequest;
+    std::string headerField1;
+    std::string headerField2;
+    std::string headerField3;
+    std::string body;
     //parser state, so that if the header is in multiple packets it can still be parsed
     std::string buffer;
     int bufferIndex;
@@ -25,10 +28,65 @@ public:
     std::string fieldValue;
     bool parsingFieldName;
 
-    HTTPHeader()
+    std::string requestType()
+    {
+        return headerField1;
+    }
+
+    std::string path()
+    {
+        return headerField2;
+    }
+
+    std::string protocol()
+    {
+        if(isRequest)
+        {
+            return headerField3;
+        }
+        else
+        {
+            return headerField1;
+        }
+    }
+
+    void setProtocol(std::string toSet)
+    {
+        if(isRequest)
+        {
+            headerField3 = toSet;
+        }
+        else
+        {
+            headerField1 = toSet;
+        }
+    }
+
+    std::string statusCode()
+    {
+        return headerField2;
+    }
+
+    void setStatusCode(std::string toSet)
+    {
+        headerField2 = toSet;
+    }
+
+    std::string status()
+    {
+        return headerField3;
+    }
+
+    void setStatus(std::string toSet)
+    {
+        headerField3 = toSet;
+    }
+
+    HTTPHeader(bool isRequest_)
     {
         bufferIndex = 0;
         parsingFieldName = true;
+        isRequest = isRequest_;
     }
 
     void parse(std::string input)
@@ -38,19 +96,19 @@ public:
         {
             while(buffer[bufferIndex] != ' ')
             {
-                requestType += buffer[bufferIndex];
+                headerField1 += buffer[bufferIndex];
                 bufferIndex++;
             }
             bufferIndex++;
             while(buffer[bufferIndex] != ' ')
             {
-                path += buffer[bufferIndex];
+                headerField2 += buffer[bufferIndex];
                 bufferIndex++;
             }
             bufferIndex++;
             while(buffer[bufferIndex] != '\r')
             {
-                protocol += buffer[bufferIndex];
+                headerField3 += buffer[bufferIndex];
                 bufferIndex++;
             }
             bufferIndex += 2;
@@ -83,22 +141,25 @@ public:
         }
     }
 
-    void printData()
+    std::string getHeaderString()
     {
-        std::cout << requestType << std::endl;
-        std::cout << path << std::endl;
-        std::cout << protocol << std::endl;
-        std::map<std::string,std::string>::iterator itr;
+        std::string toReturn;
+        toReturn += requestType() + " " + path() + " " + protocol() + "\r\n";
+        std::map<std::string, std::string>::iterator itr;
         for(itr = headers.begin(); itr != headers.end(); itr++)
         {
-            std::cout << itr->first << std::endl;
-            std::cout << itr->second << std::endl;
+            toReturn += itr->first + ": " + itr->second + "\r\n";
         }
+        toReturn += "\r\n";
+        toReturn += body;
+        return toReturn;
     }
 };
 
 class webServer
 {
+    std::map<std::string, std::function<std::string(HTTPHeader)> routes;
+
     struct connection
     {
         int sockfd;
@@ -115,9 +176,9 @@ class webServer
         std::cout << recieved << std::endl;
         buffer[recieved] = '\0';
         printf("%s\n", buffer);
-        HTTPHeader headerThing;
+        HTTPHeader headerThing(true);
         headerThing.parse(std::string(buffer));
-        headerThing.printData();
+        std::cout << headerThing.getHeaderString() << std::endl;
 
         close(conn->sockfd);
         delete(conn);
