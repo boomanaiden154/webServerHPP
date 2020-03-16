@@ -29,6 +29,7 @@ public:
     std::string fieldName;
     std::string fieldValue;
     bool parsingFieldName;
+    bool parsingHeader;
 
     std::string requestType()
     {
@@ -89,57 +90,67 @@ public:
         bufferIndex = 0;
         parsingFieldName = true;
         isRequest = isRequest_;
+        parsingHeader = false;
     }
 
     void parse(std::string input)
     {
-        buffer += input;
-        if(bufferIndex == 0)
+        if(parsingHeader)
         {
-            while(buffer[bufferIndex] != ' ')
+            buffer += input;
+            if(bufferIndex == 0)
             {
-                headerField1 += buffer[bufferIndex];
+                while(buffer[bufferIndex] != ' ')
+                {
+                    headerField1 += buffer[bufferIndex];
+                    bufferIndex++;
+                }
                 bufferIndex++;
+                while(buffer[bufferIndex] != ' ')
+                {
+                    headerField2 += buffer[bufferIndex];
+                    bufferIndex++;
+                }
+                bufferIndex++;
+                while(buffer[bufferIndex] != '\r')
+                {
+                    headerField3 += buffer[bufferIndex];
+                    bufferIndex++;
+                }
+                bufferIndex += 2;
             }
-            bufferIndex++;
-            while(buffer[bufferIndex] != ' ')
+            while(buffer[bufferIndex] != '\r' && buffer[bufferIndex + 1] != '\n')
             {
-                headerField2 += buffer[bufferIndex];
-                bufferIndex++;
+                if(parsingFieldName)
+                {
+                    while(buffer[bufferIndex] != ':' && buffer[bufferIndex + 1] != ' ')
+                    {
+                        fieldName += buffer[bufferIndex];
+                        bufferIndex++;
+                    }
+                    bufferIndex += 2;
+                    parsingFieldName = false;
+                }
+                else
+                {
+                    while(buffer[bufferIndex] != '\r' && buffer[bufferIndex + 1] != '\n')
+                    {
+                        fieldValue += buffer[bufferIndex];
+                        bufferIndex++;
+                    }
+                    bufferIndex += 2;
+                    headers[fieldName] = fieldValue;
+                    fieldName.clear();
+                    fieldValue.clear();
+                    parsingFieldName = true;
+                }
             }
-            bufferIndex++;
-            while(buffer[bufferIndex] != '\r')
-            {
-                headerField3 += buffer[bufferIndex];
-                bufferIndex++;
-            }
-            bufferIndex += 2;
+            body += buffer.substr(bufferIndex, buffer.size() - bufferIndex);
+            parsingHeader = false;
         }
-        while(buffer[bufferIndex] != '\r' && buffer[bufferIndex + 1] != '\n')
+        else
         {
-            if(parsingFieldName)
-            {
-                while(buffer[bufferIndex] != ':' && buffer[bufferIndex + 1] != ' ')
-                {
-                    fieldName += buffer[bufferIndex];
-                    bufferIndex++;
-                }
-                bufferIndex += 2;
-                parsingFieldName = false;
-            }
-            else
-            {
-                while(buffer[bufferIndex] != '\r' && buffer[bufferIndex + 1] != '\n')
-                {
-                    fieldValue += buffer[bufferIndex];
-                    bufferIndex++;
-                }
-                bufferIndex += 2;
-                headers[fieldName] = fieldValue;
-                fieldName.clear();
-                fieldValue.clear();
-                parsingFieldName = true;
-            }
+            body += input;
         }
     }
 
