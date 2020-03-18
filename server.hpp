@@ -90,7 +90,12 @@ public:
         bufferIndex = 0;
         parsingFieldName = true;
         isRequest = isRequest_;
-        parsingHeader = false;
+        parsingHeader = true;
+    }
+
+    HTTPHeader()
+    {
+        HTTPHeader(true);
     }
 
     void parse(std::string input)
@@ -185,11 +190,11 @@ public:
         std::map<std::string, std::function<void(int, HTTPHeader)>>* rawRoutes;
     };
 
-    static std::function<std::string(HTTPHeader)> processGetRequestRaw(std::function<std::string()> toSendFunction)
+    static std::function<std::string(HTTPHeader)> processGetRequestRaw(std::function<std::string(HTTPHeader)> toSendFunction)
     {
-        return [&toSendFunction](HTTPHeader header)
+        return [toSendFunction](HTTPHeader header)
         {
-            std::string toSend = toSendFunction();
+            std::string toSend = toSendFunction(header);
 
             HTTPHeader headerToSend(false);
             headerToSend.setProtocol("HTTP/1.1");
@@ -229,6 +234,15 @@ public:
         }; 
     }
 
+    static std::function<std::string(HTTPHeader)> processPostRequestRaw(std::function<void(HTTPHeader)> processFunction)
+    {
+        return [processFunction](HTTPHeader header)
+        {
+            processFunction(header);
+            return "";
+        };
+    }
+
     static void* processConnection(void* pointer)
     {
         char buffer[2048];
@@ -241,8 +255,12 @@ public:
 
         if((*conn->routes).count(header.path()))
         {
+            std::cout << header.getHeaderString() << std::endl;
             std::string toSend = (*conn->routes)[header.path()](header);
-            send(conn->sockfd, toSend.c_str(), toSend.size(), 0);
+            if(toSend.size() != 0)
+            {
+                send(conn->sockfd, toSend.c_str(), toSend.size(), 0);
+            }
         }
         else if((*conn->rawRoutes).count(header.path()))
         {
