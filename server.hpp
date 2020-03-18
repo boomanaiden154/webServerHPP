@@ -150,6 +150,7 @@ public:
                     parsingFieldName = true;
                 }
             }
+            bufferIndex += 2; //for final \r\n
             body += buffer.substr(bufferIndex, buffer.size() - bufferIndex);
             parsingHeader = false;
         }
@@ -255,7 +256,6 @@ public:
 
         if((*conn->routes).count(header.path()))
         {
-            std::cout << header.getHeaderString() << std::endl;
             std::string toSend = (*conn->routes)[header.path()](header);
             if(toSend.size() != 0)
             {
