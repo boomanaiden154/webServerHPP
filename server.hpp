@@ -235,12 +235,23 @@ public:
         }; 
     }
 
-    static std::function<std::string(HTTPHeader)> processPostRequestRaw(std::function<void(HTTPHeader)> processFunction)
+    static std::function<std::string(HTTPHeader)> processPostRequestRaw(std::function<std::string(HTTPHeader)> processFunction, std::string mimeType = "application/json")
     {
-        return [processFunction](HTTPHeader header)
+        return [processFunction, mimeType](HTTPHeader header)
         {
-            processFunction(header);
-            return "";
+            std::string toSend = processFunction(header);
+
+            HTTPHeader headerToSend(false);
+            headerToSend.setProtocol("HTTP/1.1");
+            headerToSend.setStatusCode("200");
+            headerToSend.setStatus("OK");
+            headerToSend.headers["Server"] = "custom/0.0.1";
+            headerToSend.headers["Content-Type"] = mimeType;
+            headerToSend.headers["Content-Length"] = std::to_string(toSend.size());
+            headerToSend.headers["Connection"] = "keep-alive";
+            headerToSend.body = toSend;
+
+            return headerToSend.getHeaderString();
         };
     }
 

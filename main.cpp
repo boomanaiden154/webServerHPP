@@ -10,10 +10,11 @@ std::string testing(HTTPHeader input)
     return "<b>BIFFY</b>";
 }
 
-void testing2(HTTPHeader input)
+std::string testing2(HTTPHeader input)
 {
     std::cout << input.body << std::endl;
     std::cout << input.body.size() << std::endl;
+    return "{\"test\":\"this be some epic JSON bruh\"}";
 }
 
 void sigintHandler(int sig_num)
