@@ -4,7 +4,7 @@
 
 webServer server;
 
-std::string testing(HTTPHeader input)
+std::string testing(struct webServer::request req)
 {
     std::cout << "testing the thing" << std::endl;
     return "<b>BIFFY</b>";
@@ -27,8 +27,8 @@ int main()
 {
     signal(SIGINT, sigintHandler);
     server.routes["/"] = webServer::processGetRequestFile("testing.jpg","image/jpeg");
-    server.routes["/biffy"] = webServer::processGetRequestRaw(testing);
-    server.routes["/testing"] = webServer::processGetRequestRaw(testing);
-    server.routes["/biffy2"] = webServer::processPostRequestRaw(testing2);
+    server.routes["/biffy"] = webServer::processGetRequestString(testing);
+    //server.routes["/testing"] = webServer::processGetRequestRaw(testing);
+    //server.routes["/biffy2"] = webServer::processPostRequestRaw(testing2);
     server.initalize();
 }

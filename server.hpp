@@ -178,8 +178,19 @@ public:
 class webServer
 {
 public:
-    std::map<std::string, std::function<std::string(HTTPHeader)>> routes;
-    std::map<std::string, std::function<void(int, HTTPHeader)>> rawRoutes;
+    struct request
+    {
+        HTTPHeader header;
+        std::map<std::string, void*> data;
+        int sockfd;
+    };
+
+    struct response
+    {
+        HTTPHeader header;
+    };
+
+    std::map<std::string, std::function<void(const struct request&, struct response&)>> routes;
     int serverSockFD;
 
     struct connection
@@ -187,15 +198,14 @@ public:
         int sockfd;
         struct sockaddr address;
         int addressLength;
-        std::map<std::string, std::function<std::string(HTTPHeader)>>* routes;
-        std::map<std::string, std::function<void(int, HTTPHeader)>>* rawRoutes;
+        std::map<std::string, std::function<void(const struct request&, struct response&)>>* routes;
     };
 
-    static std::function<std::string(HTTPHeader)> processGetRequestRaw(std::function<std::string(HTTPHeader)> toSendFunction)
+    static std::function<void(const struct request&, struct response&)> processGetRequestString(std::function<std::string(struct request)> toSendFunction)
     {
-        return [toSendFunction](HTTPHeader header)
+        return [toSendFunction](const struct request& req, struct response& res)
         {
-            std::string toSend = toSendFunction(header);
+            std::string toSend = toSendFunction(req);
 
             HTTPHeader headerToSend(false);
             headerToSend.setProtocol("HTTP/1.1");
@@ -207,11 +217,11 @@ public:
             headerToSend.headers["Connection"] = "keep-alive";
             headerToSend.body = toSend;
 
-            return headerToSend.getHeaderString();
+            res.header = headerToSend;
         };
     }
 
-    static std::function<std::string(HTTPHeader)> processGetRequestFile(std::string fileName, std::string mimeType)
+    static std::function<void(const struct request&, struct response&)> processGetRequestFile(std::string fileName, std::string mimeType)
     {
         std::ifstream inputStream(fileName);
         std::stringstream stringStream;
@@ -227,19 +237,18 @@ public:
         headerToSend.headers["Content-Length"] = std::to_string(body.size());
         headerToSend.headers["Connection"] = "keep-alive";
         headerToSend.body = body;
-        std::string toSend = headerToSend.getHeaderString();
 
-        return [toSend](HTTPHeader header)
+        return [headerToSend](const struct request& req, struct response& res)
         {
-            return toSend;
+            res.header = headerToSend;
         }; 
     }
 
-    static std::function<std::string(HTTPHeader)> processPostRequestRaw(std::function<std::string(HTTPHeader)> processFunction, std::string mimeType = "application/json")
+    static std::function<void(const struct request&, struct response&)> processPostRequestRaw(std::function<std::string(struct request)> processFunction, std::string mimeType = "application/json")
     {
-        return [processFunction, mimeType](HTTPHeader header)
+        return [processFunction, mimeType](const struct request& req, struct response& res)
         {
-            std::string toSend = processFunction(header);
+            std::string toSend = processFunction(req);
 
             HTTPHeader headerToSend(false);
             headerToSend.setProtocol("HTTP/1.1");
@@ -251,7 +260,10 @@ public:
             headerToSend.headers["Connection"] = "keep-alive";
             headerToSend.body = toSend;
 
-            return headerToSend.getHeaderString();
+            struct response toReturn;
+            toReturn.header = headerToSend;
+
+            return toReturn;
         };
     }
 
@@ -262,20 +274,21 @@ public:
 
         int recieved = recv(conn->sockfd, buffer, sizeof(buffer) - 1, 0);
         buffer[recieved] = '\0';
+        struct request requestInput;
         HTTPHeader header(true);
         header.parse(std::string(buffer));
+        requestInput.header = header;
 
         if((*conn->routes).count(header.path()))
         {
-            std::string toSend = (*conn->routes)[header.path()](header);
-            if(toSend.size() != 0)
+            struct response toSend;
+            (*conn->routes)[header.path()](requestInput, toSend);
+            std::string toSendString = toSend.header.getHeaderString();
+            std::cout << toSendString << std::endl;
+            if(toSendString.size() != 0)
             {
-                send(conn->sockfd, toSend.c_str(), toSend.size(), 0);
+                send(conn->sockfd, toSendString.c_str(), toSendString.size(), 0);
             }
-        }
-        else if((*conn->rawRoutes).count(header.path()))
-        {
-            (*conn->rawRoutes)[header.path()](conn->sockfd, header);
         }
 
         close(conn->sockfd);
@@ -303,7 +316,6 @@ public:
             struct connection* conn = (struct connection*)malloc(sizeof(struct connection));
             conn->sockfd = accept(serverSockFD, &conn->address, (socklen_t*)&conn->addressLength);
             conn->routes = &routes;
-            conn->rawRoutes = &rawRoutes;
             if(conn->sockfd <= 0)
             {
                 delete(conn);
