@@ -11,6 +11,7 @@
 #include <functional>
 #include <fstream>
 #include <sstream>
+#include <vector>
 
 #define PORT 8081
 
@@ -175,23 +176,28 @@ public:
     }
 };
 
+//forward declaration for middleware
+class middleware;
+
 class webServer
 {
 public:
     struct request
     {
         HTTPHeader header;
-        std::map<std::string, void*> data;
+        std::map<std::string, void*>* data;
         int sockfd;
     };
 
     struct response
     {
+        std::map<std::string, void*>* data;
         HTTPHeader header;
     };
 
     std::map<std::string, std::function<void(const struct request&, struct response&)>> routes;
     int serverSockFD;
+    std::vector<middleware*> serverMiddleware;
 
     struct connection
     {
@@ -199,137 +205,169 @@ public:
         struct sockaddr address;
         int addressLength;
         std::map<std::string, std::function<void(const struct request&, struct response&)>>* routes;
+        std::vector<middleware*>* serverMiddleware;
     };
 
-    static std::function<void(const struct request&, struct response&)> processGetRequestString(std::function<std::string(struct request)> toSendFunction)
+    static std::function<void(const struct request&, struct response&)> processGetRequestString(std::function<std::string(struct request)>);
+    static std::function<void(const struct request&, struct response&)> processGetRequestFile(std::string, std::string);
+    static std::function<void(const struct request&, struct response&)> processPostRequestRaw(std::function<std::string(struct request)>, std::string);
+    static void* processConnection(void*);
+    void initalize();
+    void closeServer();
+};
+
+class middleware
+{
+public:
+    virtual void processRequest(struct webServer::request&) {};
+    virtual void processResponse(struct webServer::response&) {};
+};
+
+std::function<void(const struct webServer::request&, struct webServer::response&)> webServer::processGetRequestString(std::function<std::string(struct webServer::request)> toSendFunction)
+{
+    return [toSendFunction](const struct request& req, struct response& res)
     {
-        return [toSendFunction](const struct request& req, struct response& res)
-        {
-            std::string toSend = toSendFunction(req);
+        std::string toSend = toSendFunction(req);
 
-            HTTPHeader headerToSend(false);
-            headerToSend.setProtocol("HTTP/1.1");
-            headerToSend.setStatusCode("200");
-            headerToSend.setStatus("OK");
-            headerToSend.headers["Server"] = "custom/0.0.1";
-            headerToSend.headers["Content-Type"] = "text/html";
-            headerToSend.headers["Content-Length"] = std::to_string(toSend.size());
-            headerToSend.headers["Connection"] = "keep-alive";
-            headerToSend.body = toSend;
+        HTTPHeader headerToSend(false);
+        headerToSend.setProtocol("HTTP/1.1");
+        headerToSend.setStatusCode("200");
+        headerToSend.setStatus("OK");
+        headerToSend.headers["Server"] = "custom/0.0.1";
+        headerToSend.headers["Content-Type"] = "text/html";
+        headerToSend.headers["Content-Length"] = std::to_string(toSend.size());
+        headerToSend.headers["Connection"] = "keep-alive";
+        headerToSend.body = toSend;
 
-            res.header = headerToSend;
-        };
-    }
+        res.header = headerToSend;
+    };
+}
 
-    static std::function<void(const struct request&, struct response&)> processGetRequestFile(std::string fileName, std::string mimeType)
+std::function<void(const struct webServer::request&, struct webServer::response&)> webServer::processGetRequestFile(std::string fileName, std::string mimeType)
+{
+    std::ifstream inputStream(fileName);
+    std::stringstream stringStream;
+    stringStream << inputStream.rdbuf();
+    std::string body = stringStream.str();
+    
+    HTTPHeader headerToSend(false);
+    headerToSend.setProtocol("HTTP/1.1");
+    headerToSend.setStatusCode("200");
+    headerToSend.setStatus("OK");
+    headerToSend.headers["Server"] = "custom/0.0.1";
+    headerToSend.headers["Content-Type"] = mimeType;
+    headerToSend.headers["Content-Length"] = std::to_string(body.size());
+    headerToSend.headers["Connection"] = "keep-alive";
+    headerToSend.body = body;
+
+    return [headerToSend](const struct request& req, struct response& res)
     {
-        std::ifstream inputStream(fileName);
-        std::stringstream stringStream;
-        stringStream << inputStream.rdbuf();
-        std::string body = stringStream.str();
-        
+        res.header = headerToSend;
+    }; 
+}
+
+std::function<void(const struct webServer::request&, struct webServer::response&)> webServer::processPostRequestRaw(std::function<std::string(struct webServer::request)> processFunction, std::string mimeType = "application/json")
+{
+    return [processFunction, mimeType](const struct request& req, struct response& res)
+    {
+        std::string toSend = processFunction(req);
+
         HTTPHeader headerToSend(false);
         headerToSend.setProtocol("HTTP/1.1");
         headerToSend.setStatusCode("200");
         headerToSend.setStatus("OK");
         headerToSend.headers["Server"] = "custom/0.0.1";
         headerToSend.headers["Content-Type"] = mimeType;
-        headerToSend.headers["Content-Length"] = std::to_string(body.size());
+        headerToSend.headers["Content-Length"] = std::to_string(toSend.size());
         headerToSend.headers["Connection"] = "keep-alive";
-        headerToSend.body = body;
+        headerToSend.body = toSend;
 
-        return [headerToSend](const struct request& req, struct response& res)
-        {
-            res.header = headerToSend;
-        }; 
-    }
+        struct response toReturn;
+        toReturn.header = headerToSend;
 
-    static std::function<void(const struct request&, struct response&)> processPostRequestRaw(std::function<std::string(struct request)> processFunction, std::string mimeType = "application/json")
+        return toReturn;
+    };
+}
+
+void* webServer::processConnection(void* pointer)
+{
+    char buffer[2048];
+    connection* conn = (connection*)pointer;
+
+    int recieved = recv(conn->sockfd, buffer, sizeof(buffer) - 1, 0);
+    buffer[recieved] = '\0';
+    struct request requestInput;
+    HTTPHeader header(true);
+    header.parse(std::string(buffer));
+    requestInput.header = header;
+    std::map<std::string, void*> data;
+    requestInput.data = &data;
+
+    if((*conn->routes).count(header.path()))
     {
-        return [processFunction, mimeType](const struct request& req, struct response& res)
+        //run middleware on request
+        for(int i = 0; i < (*conn->serverMiddleware).size(); i++)
         {
-            std::string toSend = processFunction(req);
-
-            HTTPHeader headerToSend(false);
-            headerToSend.setProtocol("HTTP/1.1");
-            headerToSend.setStatusCode("200");
-            headerToSend.setStatus("OK");
-            headerToSend.headers["Server"] = "custom/0.0.1";
-            headerToSend.headers["Content-Type"] = mimeType;
-            headerToSend.headers["Content-Length"] = std::to_string(toSend.size());
-            headerToSend.headers["Connection"] = "keep-alive";
-            headerToSend.body = toSend;
-
-            struct response toReturn;
-            toReturn.header = headerToSend;
-
-            return toReturn;
-        };
-    }
-
-    static void* processConnection(void* pointer)
-    {
-        char buffer[2048];
-        connection* conn = (connection*)pointer;
-
-        int recieved = recv(conn->sockfd, buffer, sizeof(buffer) - 1, 0);
-        buffer[recieved] = '\0';
-        struct request requestInput;
-        HTTPHeader header(true);
-        header.parse(std::string(buffer));
-        requestInput.header = header;
-
-        if((*conn->routes).count(header.path()))
-        {
-            struct response toSend;
-            (*conn->routes)[header.path()](requestInput, toSend);
-            std::string toSendString = toSend.header.getHeaderString();
-            std::cout << toSendString << std::endl;
-            if(toSendString.size() != 0)
-            {
-                send(conn->sockfd, toSendString.c_str(), toSendString.size(), 0);
-            }
+            (*conn->serverMiddleware)[i]->processRequest(requestInput);
         }
-
-        close(conn->sockfd);
-        delete(conn);
-        pthread_exit(0);
-    }
-
-    void initalize()
-    {
-        struct sockaddr_in address;
-        int port;
-
-        serverSockFD = socket(AF_INET, SOCK_STREAM, 0);
-
-        address.sin_family = AF_INET;
-        address.sin_addr.s_addr = INADDR_ANY;
-        address.sin_port = htons(PORT);
-
-        bind(serverSockFD, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
-        listen(serverSockFD, 5);
-
-        while(1)
+        struct response toSend;
+        toSend.data = &data;
+        (*conn->routes)[header.path()](requestInput, toSend);
+        //run middleware on output
+        for(int i = 0; i < (*conn->serverMiddleware).size(); i++)
         {
-            pthread_t thread;
-            struct connection* conn = (struct connection*)malloc(sizeof(struct connection));
-            conn->sockfd = accept(serverSockFD, &conn->address, (socklen_t*)&conn->addressLength);
-            conn->routes = &routes;
-            if(conn->sockfd <= 0)
-            {
-                delete(conn);
-            }
-            else
-            {
-                pthread_create(&thread, 0, processConnection, (void*)conn);
-                pthread_detach(thread);
-            }
+            (*conn->serverMiddleware)[i]->processResponse(toSend);
+        }
+        std::string toSendString = toSend.header.getHeaderString();
+        if(toSendString.size() != 0)
+        {
+            send(conn->sockfd, toSendString.c_str(), toSendString.size(), 0);
         }
     }
-
-    void closeServer()
+    else
     {
-        close(serverSockFD);
+        //return 404
     }
-};
+
+    close(conn->sockfd);
+    delete(conn);
+    pthread_exit(0);
+}
+
+void webServer::initalize()
+{
+    struct sockaddr_in address;
+    int port;
+
+    serverSockFD = socket(AF_INET, SOCK_STREAM, 0);
+
+    address.sin_family = AF_INET;
+    address.sin_addr.s_addr = INADDR_ANY;
+    address.sin_port = htons(PORT);
+
+    bind(serverSockFD, (struct sockaddr*)&address, sizeof(struct sockaddr_in));
+    listen(serverSockFD, 5);
+
+    while(1)
+    {
+        pthread_t thread;
+        struct connection* conn = (struct connection*)malloc(sizeof(struct connection));
+        conn->sockfd = accept(serverSockFD, &conn->address, (socklen_t*)&conn->addressLength);
+        conn->routes = &routes;
+        conn->serverMiddleware = &serverMiddleware;
+        if(conn->sockfd <= 0)
+        {
+            delete(conn);
+        }
+        else
+        {
+            pthread_create(&thread, 0, processConnection, (void*)conn);
+            pthread_detach(thread);
+        }
+    }
+}
+
+void webServer::closeServer()
+{
+    close(serverSockFD);
+}
