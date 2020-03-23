@@ -27,12 +27,20 @@ class middlewareTesting: public middleware
 {
     void processRequest(struct webServer::request& req)
     {
-        std::cout << "processing request" << std::endl;
+        std::cout << "processing response" << std::endl;
+        std::vector<struct HTTPHeader::cookie> cookies = HTTPHeader::parseCookiesFromHeader(req.header);
+        for(int i = 0; i < cookies.size(); i++)
+        {
+            std::cout << cookies[i].name << ":" << cookies[i].value << std::endl;
+        }
     }
 
     void processResponse(struct webServer::response& res)
     {
-        std::cout << "processing response" << std::endl;
+        std::cout << "processing request" << std::endl;
+        struct HTTPHeader::cookie cookie = {"test","whatthebif"};
+        HTTPHeader::addCookieToHeader(cookie, res.header);
+        std::cout << "added cookie to header" << std::endl;
     }
 };
 

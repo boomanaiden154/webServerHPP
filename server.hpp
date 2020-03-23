@@ -18,7 +18,7 @@
 class HTTPHeader
 {
 public:
-    std::map<std::string, std::string> headers;
+    std::multimap<std::string, std::string> headers;
     bool isRequest;
     std::string headerField1;
     std::string headerField2;
@@ -99,6 +99,14 @@ public:
         HTTPHeader(true);
     }
 
+    void setDefaultResponseHeaders()
+    {
+        setProtocol("HTTP/1.1");
+        setStatusCode("200");
+        setStatus("OK");
+        headers.insert(std::pair<std::string, std::string>("Server","custom/0.0.1"));
+    }
+
     void parse(std::string input)
     {
         if(parsingHeader)
@@ -145,7 +153,7 @@ public:
                         bufferIndex++;
                     }
                     bufferIndex += 2;
-                    headers[fieldName] = fieldValue;
+                    headers.insert(std::pair<std::string,std::string>(fieldName,fieldValue));
                     fieldName.clear();
                     fieldValue.clear();
                     parsingFieldName = true;
@@ -173,6 +181,46 @@ public:
         toReturn += "\r\n";
         toReturn += body;
         return toReturn;
+    }
+
+    struct cookie
+    {
+        std::string name;
+        std::string value;
+    };
+
+    static std::vector<struct cookie> parseCookiesFromHeader(HTTPHeader input)
+    {
+        std::vector<struct cookie> toReturn;
+        if(input.headers.find("Cookie") != input.headers.end())
+        {
+            int index = 0;
+            while(index < input.headers.find("Cookie")->second.size())
+            {
+                std::string name;
+                while(input.headers.find("Cookie")->second[index] != '=')
+                {
+                    name += input.headers.find("Cookie")->second[index];
+                    index++;
+                }
+                index++;
+                std::string value;
+                while(input.headers.find("Cookie")->second[index] != ';' && index < input.headers.find("Cookie")->second.size())
+                {
+                    value += input.headers.find("Cookie")->second[index];
+                    index++;
+                }
+                index++;
+                struct cookie newCookie {name, value};
+                toReturn.push_back(newCookie);
+            }
+        }
+        return toReturn;
+    }
+
+    static void addCookieToHeader(const struct cookie inputCookie, HTTPHeader& input)
+    {
+        input.headers.insert(std::pair<std::string,std::string>("Set-Cookie", inputCookie.name + "=" + inputCookie.value));
     }
 };
 
@@ -230,13 +278,8 @@ std::function<void(const struct webServer::request&, struct webServer::response&
         std::string toSend = toSendFunction(req);
 
         HTTPHeader headerToSend(false);
-        headerToSend.setProtocol("HTTP/1.1");
-        headerToSend.setStatusCode("200");
-        headerToSend.setStatus("OK");
-        headerToSend.headers["Server"] = "custom/0.0.1";
-        headerToSend.headers["Content-Type"] = "text/html";
-        headerToSend.headers["Content-Length"] = std::to_string(toSend.size());
-        headerToSend.headers["Connection"] = "keep-alive";
+        headerToSend.setDefaultResponseHeaders();
+        headerToSend.headers.insert(std::pair<std::string, std::string>("Content-Length",std::to_string(toSend.size())));
         headerToSend.body = toSend;
 
         res.header = headerToSend;
@@ -251,13 +294,8 @@ std::function<void(const struct webServer::request&, struct webServer::response&
     std::string body = stringStream.str();
     
     HTTPHeader headerToSend(false);
-    headerToSend.setProtocol("HTTP/1.1");
-    headerToSend.setStatusCode("200");
-    headerToSend.setStatus("OK");
-    headerToSend.headers["Server"] = "custom/0.0.1";
-    headerToSend.headers["Content-Type"] = mimeType;
-    headerToSend.headers["Content-Length"] = std::to_string(body.size());
-    headerToSend.headers["Connection"] = "keep-alive";
+    headerToSend.setDefaultResponseHeaders();
+    headerToSend.headers.insert(std::pair<std::string, std::string>("Content-Length",std::to_string(body.size())));
     headerToSend.body = body;
 
     return [headerToSend](const struct request& req, struct response& res)
@@ -273,13 +311,8 @@ std::function<void(const struct webServer::request&, struct webServer::response&
         std::string toSend = processFunction(req);
 
         HTTPHeader headerToSend(false);
-        headerToSend.setProtocol("HTTP/1.1");
-        headerToSend.setStatusCode("200");
-        headerToSend.setStatus("OK");
-        headerToSend.headers["Server"] = "custom/0.0.1";
-        headerToSend.headers["Content-Type"] = mimeType;
-        headerToSend.headers["Content-Length"] = std::to_string(toSend.size());
-        headerToSend.headers["Connection"] = "keep-alive";
+        headerToSend.setDefaultResponseHeaders();
+        headerToSend.headers.insert(std::pair<std::string, std::string>("Content-Length",std::to_string(toSend.size())));
         headerToSend.body = toSend;
 
         struct response toReturn;
