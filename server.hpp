@@ -1,3 +1,5 @@
+#pragma once
+
 #include <unistd.h>
 #include <stdio.h>
 #include <sys/socket.h>
@@ -183,15 +185,9 @@ public:
         return toReturn;
     }
 
-    struct cookie
+    static std::map<std::string, std::string> parseCookiesFromHeader(HTTPHeader& input)
     {
-        std::string name;
-        std::string value;
-    };
-
-    static std::vector<struct cookie> parseCookiesFromHeader(HTTPHeader input)
-    {
-        std::vector<struct cookie> toReturn;
+        std::map<std::string, std::string> toReturn;
         if(input.headers.find("Cookie") != input.headers.end())
         {
             int index = 0;
@@ -211,16 +207,15 @@ public:
                     index++;
                 }
                 index++;
-                struct cookie newCookie {name, value};
-                toReturn.push_back(newCookie);
+                toReturn[name] = value;
             }
         }
         return toReturn;
     }
 
-    static void addCookieToHeader(const struct cookie inputCookie, HTTPHeader& input)
+    static void addCookieToHeader(std::string name, std::string value, HTTPHeader& input)
     {
-        input.headers.insert(std::pair<std::string,std::string>("Set-Cookie", inputCookie.name + "=" + inputCookie.value));
+        input.headers.insert(std::pair<std::string,std::string>("Set-Cookie", name + "=" + value));
     }
 };
 
