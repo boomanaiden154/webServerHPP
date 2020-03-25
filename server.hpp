@@ -228,14 +228,18 @@ public:
     struct request
     {
         HTTPHeader header;
-        std::map<std::string, void*>* data;
+        std::map<std::string, void*>& data;
         int sockfd;
+
+        request(std::map<std::string, void*>& data_): data(data_) {}
     };
 
     struct response
     {
-        std::map<std::string, void*>* data;
+        std::map<std::string, void*>& data;
         HTTPHeader header;
+
+        response(std::map<std::string, void*>& data_): data(data_) {}
     };
 
     std::map<std::string, std::function<void(const struct request&, struct response&)>> routes;
@@ -310,10 +314,7 @@ std::function<void(const struct webServer::request&, struct webServer::response&
         headerToSend.headers.insert(std::pair<std::string, std::string>("Content-Length",std::to_string(toSend.size())));
         headerToSend.body = toSend;
 
-        struct response toReturn;
-        toReturn.header = headerToSend;
-
-        return toReturn;
+        res.header = headerToSend;
     };
 }
 
@@ -322,14 +323,13 @@ void* webServer::processConnection(void* pointer)
     char buffer[2048];
     connection* conn = (connection*)pointer;
 
+    std::map<std::string, void*> requestResponseData;
     int recieved = recv(conn->sockfd, buffer, sizeof(buffer) - 1, 0);
     buffer[recieved] = '\0';
-    struct request requestInput;
+    struct request requestInput(requestResponseData);
     HTTPHeader header(true);
     header.parse(std::string(buffer));
     requestInput.header = header;
-    std::map<std::string, void*>* requestResponseData = new std::map<std::string, void*>();
-    requestInput.data = requestResponseData;
 
     if((*conn->routes).count(header.path()))
     {
@@ -338,8 +338,7 @@ void* webServer::processConnection(void* pointer)
         {
             (*conn->serverMiddleware)[i]->processRequest(requestInput);
         }
-        struct response toSend;
-        toSend.data = requestResponseData;
+        struct response toSend(requestResponseData);
         (*conn->routes)[header.path()](requestInput, toSend);
         //run middleware on output
         for(int i = 0; i < (*conn->serverMiddleware).size(); i++)

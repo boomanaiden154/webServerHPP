@@ -7,6 +7,11 @@ webServer server;
 
 std::string testing(struct webServer::request req)
 {
+    if(req.data["state"] == (void*)true)
+    {
+        std::cout << "LETS FRICKING GO" << std::endl;
+    }
+    req.data["state"] = (void*)true;
     std::cout << "testing the thing" << std::endl;
     return "<b>BIFFY</b>";
 }
