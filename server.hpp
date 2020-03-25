@@ -328,8 +328,8 @@ void* webServer::processConnection(void* pointer)
     HTTPHeader header(true);
     header.parse(std::string(buffer));
     requestInput.header = header;
-    std::map<std::string, void*> data;
-    requestInput.data = &data;
+    std::map<std::string, void*>* requestResponseData = new std::map<std::string, void*>();
+    requestInput.data = requestResponseData;
 
     if((*conn->routes).count(header.path()))
     {
@@ -339,7 +339,7 @@ void* webServer::processConnection(void* pointer)
             (*conn->serverMiddleware)[i]->processRequest(requestInput);
         }
         struct response toSend;
-        toSend.data = &data;
+        toSend.data = requestResponseData;
         (*conn->routes)[header.path()](requestInput, toSend);
         //run middleware on output
         for(int i = 0; i < (*conn->serverMiddleware).size(); i++)

@@ -1,6 +1,7 @@
 #include <iostream>
 #include "server.hpp"
 #include "signal.h"
+#include "state.hpp"
 
 webServer server;
 
@@ -23,31 +24,10 @@ void sigintHandler(int sig_num)
     exit(0);
 }
 
-class middlewareTesting: public middleware
-{
-    void processRequest(struct webServer::request& req)
-    {
-        std::cout << "processing response" << std::endl;
-        std::map<std::string,std::string> cookies = HTTPHeader::parseCookiesFromHeader(req.header);
-        std::map<std::string,std::string>::iterator itr;
-        for(itr = cookies.begin(); itr != cookies.end(); itr++)
-        {
-            std::cout << itr->first << ":" << itr->second << std::endl;
-        }
-    }
-
-    void processResponse(struct webServer::response& res)
-    {
-        std::cout << "processing request" << std::endl;
-        HTTPHeader::addCookieToHeader("test", "whatthebif", res.header);
-        std::cout << "added cookie to header" << std::endl;
-    }
-};
-
 int main()
 {
     signal(SIGINT, sigintHandler);
-    server.serverMiddleware.push_back(new middlewareTesting);
+    server.serverMiddleware.push_back(new stateMiddleware());
     server.routes["/"] = webServer::processGetRequestFile("testing.jpg","image/jpeg");
     server.routes["/biffy"] = webServer::processGetRequestString(testing);
     //server.routes["/testing"] = webServer::processGetRequestRaw(testing);
