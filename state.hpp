@@ -16,7 +16,7 @@ class stateMiddleware: public middleware
     std::uniform_int_distribution<uint8_t> distribution = std::uniform_int_distribution<uint8_t>(0, 61);
     int idLength;
 public: 
-    std::map<std::string, void*> stateInformation;
+    std::map<std::string, std::any> stateInformation;
 
     stateMiddleware()
     {
@@ -41,26 +41,25 @@ public:
     void processRequest(struct webServer::request& req)
     {
         std::map<std::string, std::string> cookies = HTTPHeader::parseCookiesFromHeader(req.header);
-        if(cookies.count("stateID") != 0)
+        if(cookies.count("stateID") != 0 && stateInformation.count(cookies["stateID"]) != 0)
         {
             //add information about the state to the request struct
             req.data["state"] = stateInformation[cookies["stateID"]];
-            req.data["stateID"] = &cookies["stateID"];
-            req.data["stateCookiePresent"] = (void*)true;
+            req.data["stateID"] = cookies["stateID"];
+            req.data["stateCookiePresent"] = true;
         }
         else
         {
-            req.data["state"] = NULL;
-            req.data["stateCookiePresent"] = (void*)false;
+            req.data["stateCookiePresent"] = false;
         }
     }
 
     void processResponse(struct webServer::response& res)
     {
-        if((bool)res.data["stateCookiePresent"])
+        if(std::any_cast<bool>(res.data["stateCookiePresent"]))
         {
             //state exists, take state from res and put it into the store
-            stateInformation[*(std::string*)res.data["stateID"]] = res.data["state"];
+            stateInformation[std::any_cast<std::string>(res.data["stateID"])] = res.data["state"];
         }
         else
         {

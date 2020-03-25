@@ -1,2 +1,2 @@
 main: main.cpp server.hpp state.hpp
-	g++ main.cpp -lpthread -g -o main
+	g++ main.cpp -lpthread -std=c++17 -g -o main

@@ -14,6 +14,7 @@
 #include <fstream>
 #include <sstream>
 #include <vector>
+#include <any>
 
 #define PORT 8081
 
@@ -228,18 +229,18 @@ public:
     struct request
     {
         HTTPHeader header;
-        std::map<std::string, void*>& data;
+        std::map<std::string, std::any>& data;
         int sockfd;
 
-        request(std::map<std::string, void*>& data_): data(data_) {}
+        request(std::map<std::string, std::any>& data_): data(data_) {}
     };
 
     struct response
     {
-        std::map<std::string, void*>& data;
+        std::map<std::string, std::any>& data;
         HTTPHeader header;
 
-        response(std::map<std::string, void*>& data_): data(data_) {}
+        response(std::map<std::string, std::any>& data_): data(data_) {}
     };
 
     std::map<std::string, std::function<void(const struct request&, struct response&)>> routes;
@@ -323,7 +324,7 @@ void* webServer::processConnection(void* pointer)
     char buffer[2048];
     connection* conn = (connection*)pointer;
 
-    std::map<std::string, void*> requestResponseData;
+    std::map<std::string, std::any> requestResponseData;
     int recieved = recv(conn->sockfd, buffer, sizeof(buffer) - 1, 0);
     buffer[recieved] = '\0';
     struct request requestInput(requestResponseData);
