@@ -175,13 +175,19 @@ public:
     std::string getHeaderString()
     {
         std::string toReturn;
-        toReturn += headerField1 + " " + headerField2 + " " + headerField3 + "\r\n";
+        if(headerField1.size() != 0 && headerField2.size() != 0 && headerField3.size() != 0)
+        {
+                toReturn += headerField1 + " " + headerField2 + " " + headerField3 + "\r\n";
+        }
         std::map<std::string, std::string>::iterator itr;
         for(itr = headers.begin(); itr != headers.end(); itr++)
         {
             toReturn += itr->first + ": " + itr->second + "\r\n";
         }
-        toReturn += "\r\n";
+        if(toReturn.size() != 0)
+        {
+                toReturn += "\r\n";
+        }
         toReturn += body;
         return toReturn;
     }
