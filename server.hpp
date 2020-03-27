@@ -243,7 +243,7 @@ public:
         response(std::map<std::string, std::any>& data_): data(data_) {}
     };
 
-    std::map<std::string, std::function<void(const struct request&, struct response&)>> routes;
+    std::map<std::string, std::function<void(struct request&, struct response&)>> routes;
     int serverSockFD;
     std::vector<middleware*> serverMiddleware;
 
@@ -252,13 +252,13 @@ public:
         int sockfd;
         struct sockaddr address;
         int addressLength;
-        std::map<std::string, std::function<void(const struct request&, struct response&)>>* routes;
+        std::map<std::string, std::function<void(struct request&, struct response&)>>* routes;
         std::vector<middleware*>* serverMiddleware;
     };
 
-    static std::function<void(const struct request&, struct response&)> processGetRequestString(std::function<std::string(struct request)>);
-    static std::function<void(const struct request&, struct response&)> processGetRequestFile(std::string, std::string);
-    static std::function<void(const struct request&, struct response&)> processPostRequestRaw(std::function<std::string(struct request)>, std::string);
+    static std::function<void(struct request&, struct response&)> processGetRequestString(std::function<std::string(struct request&)>);
+    static std::function<void(struct request&, struct response&)> processGetRequestFile(std::string, std::string);
+    static std::function<void(struct request&, struct response&)> processPostRequestRaw(std::function<std::string(struct request&)>, std::string);
     static void* processConnection(void*);
     void initalize();
     void closeServer();
@@ -271,9 +271,9 @@ public:
     virtual void processResponse(struct webServer::response&) {};
 };
 
-std::function<void(const struct webServer::request&, struct webServer::response&)> webServer::processGetRequestString(std::function<std::string(struct webServer::request)> toSendFunction)
+std::function<void(struct webServer::request&, struct webServer::response&)> webServer::processGetRequestString(std::function<std::string(struct webServer::request&)> toSendFunction)
 {
-    return [toSendFunction](const struct request& req, struct response& res)
+    return [toSendFunction](struct request& req, struct response& res)
     {
         std::string toSend = toSendFunction(req);
 
@@ -286,7 +286,7 @@ std::function<void(const struct webServer::request&, struct webServer::response&
     };
 }
 
-std::function<void(const struct webServer::request&, struct webServer::response&)> webServer::processGetRequestFile(std::string fileName, std::string mimeType)
+std::function<void(struct webServer::request&, struct webServer::response&)> webServer::processGetRequestFile(std::string fileName, std::string mimeType)
 {
     std::ifstream inputStream(fileName);
     std::stringstream stringStream;
@@ -298,15 +298,15 @@ std::function<void(const struct webServer::request&, struct webServer::response&
     headerToSend.headers.insert(std::pair<std::string, std::string>("Content-Length",std::to_string(body.size())));
     headerToSend.body = body;
 
-    return [headerToSend](const struct request& req, struct response& res)
+    return [headerToSend](struct request& req, struct response& res)
     {
         res.header = headerToSend;
     }; 
 }
 
-std::function<void(const struct webServer::request&, struct webServer::response&)> webServer::processPostRequestRaw(std::function<std::string(struct webServer::request)> processFunction, std::string mimeType = "application/json")
+std::function<void(struct webServer::request&, struct webServer::response&)> webServer::processPostRequestRaw(std::function<std::string(struct webServer::request&)> processFunction, std::string mimeType = "application/json")
 {
-    return [processFunction, mimeType](const struct request& req, struct response& res)
+    return [processFunction, mimeType](struct request& req, struct response& res)
     {
         std::string toSend = processFunction(req);
 

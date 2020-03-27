@@ -51,6 +51,7 @@ public:
         else
         {
             req.data["stateCookiePresent"] = false;
+            req.data["stateID"] = generateRandomString(idLength);
         }
     }
 
@@ -64,9 +65,8 @@ public:
         else
         {
             //create new state
-            std::string stateID = generateRandomString(idLength);
-            HTTPHeader::addCookieToHeader("stateID", stateID, res.header);
-            stateInformation[stateID] = res.data["state"];
+            HTTPHeader::addCookieToHeader("stateID", std::any_cast<std::string>(res.data["stateID"]), res.header);
+            stateInformation[std::any_cast<std::string>(res.data["stateID"])] = res.data["state"];
         }
     }
 };
