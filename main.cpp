@@ -3,6 +3,7 @@
 #include "signal.h"
 #include "state.hpp"
 #include "login.hpp"
+#include "websocketServer.hpp"
 
 webServer server;
 
@@ -49,5 +50,7 @@ int main()
     server.routes["/"] = webServer::processGetRequestFile("testing.jpg","image/jpeg");
     server.routes["/biffy"] = webServer::processGetRequestString(testing);
     server.routes["/login"] = webServer::processGetRequestString(testing2);
+    websocketServer ws;
+    server.routes["/websocket"] = ws.websocketRoute();
     server.initalize();
 }

@@ -17,6 +17,7 @@
 #include <any>
 
 #define PORT 8081
+#define BUFFERSIZE 8192
 
 class HTTPHeader
 {
@@ -27,6 +28,7 @@ public:
     std::string headerField2;
     std::string headerField3;
     std::string body;
+    bool isEmpty;
     //parser state, so that if the header is in multiple packets it can still be parsed
     std::string buffer;
     int bufferIndex;
@@ -95,6 +97,7 @@ public:
         parsingFieldName = true;
         isRequest = isRequest_;
         parsingHeader = true;
+        isEmpty = false;
     }
 
     HTTPHeader()
@@ -175,20 +178,23 @@ public:
     std::string getHeaderString()
     {
         std::string toReturn;
-        if(headerField1.size() != 0 && headerField2.size() != 0 && headerField3.size() != 0)
+        if(!isEmpty)
         {
-                toReturn += headerField1 + " " + headerField2 + " " + headerField3 + "\r\n";
+            if(headerField1.size() != 0 && headerField2.size() != 0 && headerField3.size() != 0)
+            {
+                    toReturn += headerField1 + " " + headerField2 + " " + headerField3 + "\r\n";
+            }
+            std::map<std::string, std::string>::iterator itr;
+            for(itr = headers.begin(); itr != headers.end(); itr++)
+            {
+                toReturn += itr->first + ": " + itr->second + "\r\n";
+            }
+            if(toReturn.size() != 0)
+            {
+                    toReturn += "\r\n";
+            }
+            toReturn += body;
         }
-        std::map<std::string, std::string>::iterator itr;
-        for(itr = headers.begin(); itr != headers.end(); itr++)
-        {
-            toReturn += itr->first + ": " + itr->second + "\r\n";
-        }
-        if(toReturn.size() != 0)
-        {
-                toReturn += "\r\n";
-        }
-        toReturn += body;
         return toReturn;
     }
 
@@ -265,6 +271,8 @@ public:
     static std::function<void(struct request&, struct response&)> processGetRequestString(std::function<std::string(struct request&)>);
     static std::function<void(struct request&, struct response&)> processGetRequestFile(std::string, std::string);
     static std::function<void(struct request&, struct response&)> processPostRequestRaw(std::function<std::string(struct request&)>, std::string);
+    static struct request recieveData(std::map<std::string, std::any>&, struct connection*);
+    static void sendData(struct response&, struct connection*);
     static void* processConnection(void*);
     void initalize();
     void closeServer();
@@ -325,20 +333,36 @@ std::function<void(struct webServer::request&, struct webServer::response&)> web
     };
 }
 
+struct webServer::request webServer::recieveData(std::map<std::string, std::any>& requestResponseData, struct webServer::connection* conn)
+{
+    char buffer[BUFFERSIZE];
+    int recieved = recv(conn->sockfd, buffer, sizeof(buffer) - 1, 0);
+    buffer[recieved] = '\0';
+    struct request requestToReturn(requestResponseData);
+    HTTPHeader header(true);
+    header.parse(std::string(buffer));
+    requestToReturn.header = header;
+    return requestToReturn;
+}
+
+void webServer::sendData(struct webServer::response& dataToSend, struct webServer::connection* conn)
+{
+    std::string toSendString = dataToSend.header.getHeaderString();
+    if(toSendString.size() != 0)
+    {
+        send(conn->sockfd, toSendString.c_str(), toSendString.size(), 0);
+    }
+}
+
 void* webServer::processConnection(void* pointer)
 {
     char buffer[2048];
     connection* conn = (connection*)pointer;
 
     std::map<std::string, std::any> requestResponseData;
-    int recieved = recv(conn->sockfd, buffer, sizeof(buffer) - 1, 0);
-    buffer[recieved] = '\0';
-    struct request requestInput(requestResponseData);
-    HTTPHeader header(true);
-    header.parse(std::string(buffer));
-    requestInput.header = header;
+    struct request requestInput = recieveData(requestResponseData, conn);
 
-    if((*conn->routes).count(header.path()))
+    if((*conn->routes).count(requestInput.header.path()))
     {
         //run middleware on request
         for(int i = 0; i < (*conn->serverMiddleware).size(); i++)
@@ -346,17 +370,13 @@ void* webServer::processConnection(void* pointer)
             (*conn->serverMiddleware)[i]->processRequest(requestInput);
         }
         struct response toSend(requestResponseData);
-        (*conn->routes)[header.path()](requestInput, toSend);
+        (*conn->routes)[requestInput.header.path()](requestInput, toSend);
         //run middleware on output
         for(int i = 0; i < (*conn->serverMiddleware).size(); i++)
         {
             (*conn->serverMiddleware)[i]->processResponse(toSend);
         }
-        std::string toSendString = toSend.header.getHeaderString();
-        if(toSendString.size() != 0)
-        {
-            send(conn->sockfd, toSendString.c_str(), toSendString.size(), 0);
-        }
+        sendData(toSend, conn);
     }
     else
     {
