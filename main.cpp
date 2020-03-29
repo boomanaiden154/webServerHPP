@@ -10,6 +10,7 @@ webServer server;
 void messageCallback(std::string input, websocket& thing)
 {
     std::cout << input << std::endl;
+    thing.sendMessage("anyone there?");
 }
 
 std::string testing(struct webServer::request& req)

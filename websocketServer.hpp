@@ -1,6 +1,7 @@
 #include "server.hpp"
 #include <tuple>
 #include <openssl/sha.h>
+#include <climits>
 
 class websocket
 {
@@ -15,9 +16,41 @@ public:
         listenerCallback = listenerCallback_;
     }
 
-    void sendMessage(std::string inputData)
+    void sendMessage(std::string message)
     {
-
+        char* toSend = new char[10 + message.size()];
+        toSend[0] = 0b10000001;
+        uint8_t offset = 0;
+        if(message.size() <= 125)
+        {
+            toSend[1] = 0x00 + message.size();
+            offset = 2;
+        }
+        else if(message.size() >= 125 && message.size() <= SHRT_MAX)
+        {
+            toSend[1] = 0b01111110;
+            toSend[2] = (uint8_t)(message.size() >> 8);
+            toSend[3] = (uint8_t)(message.size());
+            offset = 4;
+        }
+        else
+        {
+            toSend[1] = 0b01111111;
+            toSend[2] = (uint8_t)(message.size() >> 56);
+            toSend[3] = (uint8_t)(message.size() >> 48);
+            toSend[4] = (uint8_t)(message.size() >> 40);
+            toSend[5] = (uint8_t)(message.size() >> 32);
+            toSend[6] = (uint8_t)(message.size() >> 24);
+            toSend[7] = (uint8_t)(message.size() >> 16);
+            toSend[8] = (uint8_t)(message.size() >> 8);
+            toSend[9] = (uint8_t)(message.size());
+            offset = 10;
+        }
+        for(int i = 0; i < message.size(); i++)
+        {
+            toSend[i + offset] = message[i];
+        }
+        send(sockfd, toSend, message.size() + offset, 0);
     };
 
     std::string unmaskInput(std::string input, uint8_t* maskingKey)
