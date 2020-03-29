@@ -7,6 +7,11 @@
 
 webServer server;
 
+void messageCallback(std::string input, websocket& thing)
+{
+    std::cout << input << std::endl;
+}
+
 std::string testing(struct webServer::request& req)
 {
     if(req.data["state"].has_value() && std::any_cast<bool>(req.data["state"]) == true)
@@ -51,6 +56,7 @@ int main()
     server.routes["/biffy"] = webServer::processGetRequestString(testing);
     server.routes["/login"] = webServer::processGetRequestString(testing2);
     websocketServer ws;
+    ws.messageCallback = messageCallback;
     server.routes["/websocket"] = ws.websocketRoute();
     server.initalize();
 }

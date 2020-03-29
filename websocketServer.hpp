@@ -4,18 +4,85 @@
 
 class websocket
 {
+public:
+    std::function<void(std::string,websocket&)> listenerCallback;
     std::map<std::string, std::any> data;
     int sockfd;
 
-    void sendMessage()
+    websocket(int sockfd_, std::function<void(std::string, websocket&)> listenerCallback_)
+    {
+        sockfd = sockfd_;
+        listenerCallback = listenerCallback_;
+    }
+
+    void sendMessage(std::string inputData)
     {
 
     };
+
+    std::string unmaskInput(std::string input, uint8_t* maskingKey)
+    {
+        std::string toReturn;
+        toReturn.resize(input.size());
+        for(int i = 0; i < input.size(); i++)
+        {
+            toReturn[i] = input[i] ^ maskingKey[i % 4];
+        }
+        return toReturn;
+    }
+
+    void mainLoop()
+    {
+        while(true)
+        {
+            char socketBuffer[2];
+            int bytesRecieved1 = recv(sockfd, socketBuffer, 2, 0);
+            uint8_t payloadLengthSimple = socketBuffer[1] & 0b01111111;
+            uint64_t payloadLength;
+            if(payloadLengthSimple <= 125)
+            {
+                payloadLength = payloadLengthSimple;
+            }
+            else if(payloadLengthSimple == 126)
+            {
+                uint8_t payloadLengthBuffer[2];
+                recv(sockfd, payloadLengthBuffer, sizeof(payloadLengthBuffer), 0);
+                payloadLength = (uint64_t)payloadLengthBuffer[0] << 8;
+                payloadLength = (uint64_t)payloadLengthBuffer[1];
+            }
+            else if(payloadLengthSimple == 127)
+            {
+                uint8_t payloadLengthBuffer[8];
+                recv(sockfd, payloadLengthBuffer, sizeof(payloadLengthBuffer), 0);
+                payloadLength = (uint64_t)payloadLengthBuffer[0] << 56;
+                payloadLength += (uint64_t)payloadLengthBuffer[1] << 48;
+                payloadLength += (uint64_t)payloadLengthBuffer[2] << 40;
+                payloadLength += (uint64_t)payloadLengthBuffer[3] << 32;
+                payloadLength += (uint64_t)payloadLengthBuffer[4] << 24;
+                payloadLength += (uint64_t)payloadLengthBuffer[5] << 16;
+                payloadLength += (uint64_t)payloadLengthBuffer[6] << 8;
+                payloadLength += (uint64_t)payloadLengthBuffer[7];
+            }
+            uint8_t maskingKey[4];
+            recv(sockfd, maskingKey, sizeof(maskingKey), 0);
+            char* textBuffer = new char[payloadLength + 1];
+            uint32_t bytesRecieved = 0;
+            while(bytesRecieved < payloadLength)
+            {
+                bytesRecieved += recv(sockfd, textBuffer + bytesRecieved, payloadLength - bytesRecieved, 0);
+            }
+            textBuffer[payloadLength] = '\0';
+            listenerCallback(unmaskInput(std::string(textBuffer), maskingKey), *this);
+        }
+    }
 };
 
 class websocketServer
 {
 public:
+    std::function<void(std::string, websocket&)> messageCallback;
+    std::vector<websocket> activeConnections;
+
     static std::string SHA1Hash(std::string input)
     {
         std::string toReturn;
@@ -63,8 +130,6 @@ public:
         return toReturn;
     }
 
-    std::function<void(std::string, websocket&)> messageCallback;
-
     std::function<void(struct webServer::request&, struct webServer::response&)> websocketRoute()
     {
         return [&](struct webServer::request& req, struct webServer::response& res)
@@ -84,6 +149,8 @@ public:
             //send to the client
             std::cout << switchingProtocolsResponse.header.getHeaderString() << std::endl;
             webServer::sendData(switchingProtocolsResponse, req.sockfd);
+            activeConnections.push_back(websocket(req.sockfd, messageCallback));
+            activeConnections.back().mainLoop();
             res.header.isEmpty = true;
         };
     }
