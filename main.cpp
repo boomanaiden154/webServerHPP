@@ -44,8 +44,6 @@ void sigintHandler(int sig_num)
 
 int main()
 {
-    std::string testingBif = "dGhlIHNhbXBsZSBub25jZQ==258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-    std::cout << websocketServer::base64encode(websocketServer::SHA1Hash(testingBif)) << std::endl;
     signal(SIGINT, sigintHandler);
     server.serverMiddleware.push_back(new stateMiddleware());
     server.serverMiddleware.push_back(new loginMiddleware());

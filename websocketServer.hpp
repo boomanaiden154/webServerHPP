@@ -67,10 +67,23 @@ public:
 
     std::function<void(struct webServer::request&, struct webServer::response&)> websocketRoute()
     {
-        return [this](struct webServer::request& req, struct webServer::response& res)
+        return [&](struct webServer::request& req, struct webServer::response& res)
         {
+            std::string websocketGUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
             //recieve HTTP Upgrade request, send back HTTP 101 switching protocols
             std::cout << req.header.getHeaderString() << std::endl;
+            std::map<std::string, std::any> responseMetaData;
+            struct webServer::response switchingProtocolsResponse(responseMetaData);
+            switchingProtocolsResponse.header.isRequest = false;
+            switchingProtocolsResponse.header.setProtocol("HTTP/1.1");
+            switchingProtocolsResponse.header.setStatusCode("101");
+            switchingProtocolsResponse.header.setStatus("Switching Protocols");
+            switchingProtocolsResponse.header.headers.insert(std::pair<std::string,std::string>("Upgrade","websocket"));
+            switchingProtocolsResponse.header.headers.insert(std::pair<std::string,std::string>("Connection","Upgrade"));
+            switchingProtocolsResponse.header.headers.insert(std::pair<std::string,std::string>("sec-WebSocket-Accept",base64encode(SHA1Hash(req.header.headers.find("Sec-WebSocket-Key")->second + websocketGUID))));
+            //send to the client
+            std::cout << switchingProtocolsResponse.header.getHeaderString() << std::endl;
+            webServer::sendData(switchingProtocolsResponse, req.sockfd);
             res.header.isEmpty = true;
         };
     }

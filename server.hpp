@@ -272,7 +272,7 @@ public:
     static std::function<void(struct request&, struct response&)> processGetRequestFile(std::string, std::string);
     static std::function<void(struct request&, struct response&)> processPostRequestRaw(std::function<std::string(struct request&)>, std::string);
     static struct request recieveData(std::map<std::string, std::any>&, struct connection*);
-    static void sendData(struct response&, struct connection*);
+    static void sendData(struct response&, int sockfd);
     static void* processConnection(void*);
     void initalize();
     void closeServer();
@@ -342,15 +342,16 @@ struct webServer::request webServer::recieveData(std::map<std::string, std::any>
     HTTPHeader header(true);
     header.parse(std::string(buffer));
     requestToReturn.header = header;
+    requestToReturn.sockfd = conn->sockfd;
     return requestToReturn;
 }
 
-void webServer::sendData(struct webServer::response& dataToSend, struct webServer::connection* conn)
+void webServer::sendData(struct webServer::response& dataToSend, int sockfd)
 {
     std::string toSendString = dataToSend.header.getHeaderString();
     if(toSendString.size() != 0)
     {
-        send(conn->sockfd, toSendString.c_str(), toSendString.size(), 0);
+        send(sockfd, toSendString.c_str(), toSendString.size(), 0);
     }
 }
 
@@ -376,7 +377,7 @@ void* webServer::processConnection(void* pointer)
         {
             (*conn->serverMiddleware)[i]->processResponse(toSend);
         }
-        sendData(toSend, conn);
+        sendData(toSend, conn->sockfd);
     }
     else
     {
